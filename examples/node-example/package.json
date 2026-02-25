@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "tsc && node dist/index.js",
     "build": "tsc"
   },
   "devDependencies": {
+    "@types/node": "^25.3.0",
     "typescript": "^5.9.3"
   }
 }

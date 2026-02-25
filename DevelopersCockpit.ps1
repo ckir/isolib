@@ -1,27 +1,9 @@
 # ==============================================================================
 # ISOLIB DEVELOPER COCKPIT
-# Unified Orchestrator for TS Host, Rust Guest, and Go Guest
+# PowerShell Management Tool for Polyglot Logging Bridge
 # ==============================================================================
 
-function Show-Menu {
-    Clear-Host
-    Write-Host "================================================" -ForegroundColor Cyan
-    Write-Host "             ISOLIB DEVELOPER COCKPIT           " -ForegroundColor Cyan
-    Write-Host "================================================" -ForegroundColor Cyan
-    Write-Host " 1. [Setup]  Check & Install Dependencies"
-    Write-Host " 2. [Build]  TypeScript SDK (Host)"
-    Write-Host " 3. [Build]  Rust SDK (Guest - Shared Lib)"
-    Write-Host " 4. [Build]  Go SDK (Guest - C-Shared)"
-    Write-Host " 5. [Test]   Run Guest SDK Tests (Rust & Go)"
-    Write-Host " 6. [Test]   Run TS Tests (Vitest)"
-    Write-Host " 7. [Run]    Launch Node Example App"
-    Write-Host " 8. [Clean]  Wipe Build Artifacts & Node Modules"
-    Write-Host " 9. [Lint]   Run Polyglot Linter (TS, Rust, Go)"
-    Write-Host " V. [Verify] Check FFI Binary Status"
-    Write-Host "------------------------------------------------"
-    Write-Host " Q. Quit"
-    Write-Host "================================================"
-}
+$PSScriptRoot = Get-Location
 
 function Wait-User {
     Write-Host "`nPress Enter to return to menu..." -ForegroundColor Gray
@@ -29,62 +11,126 @@ function Wait-User {
 }
 
 function Check-Dependencies {
-    Write-Host "--- Auditing Environment ---" -ForegroundColor Yellow
-    
-    # TypeScript
-    if (Get-Command pnpm -ErrorAction SilentlyContinue) { 
-        Write-Host "[TS] pnpm found. Syncing workspace..." -ForegroundColor Green
-        Set-Location "$PSScriptRoot/packages/ts-sdk"
-        pnpm install
-        Set-Location $PSScriptRoot 
-    } else { Write-Host "[TS] Error: pnpm not found." -ForegroundColor Red }
+    Write-Host "--- Checking System Dependencies ---" -ForegroundColor Yellow
+    $deps = @("node", "pnpm", "rustc", "cargo", "go", "bun")
+    foreach ($d in $deps) {
+        if (Get-Command $d -ErrorAction SilentlyContinue) {
+            $v = & $d --version
+            Write-Host "[OK] $d ($v)" -ForegroundColor Green
+        } else {
+            Write-Host "[MISSING] $d" -ForegroundColor Red
+        }
+    }
+    Write-Host "`nRestoring workspace dependencies..." -ForegroundColor Cyan
+    pnpm install
+    Wait-User
+}
 
-    # Rust
-    if (Get-Command cargo -ErrorAction SilentlyContinue) { 
-        Write-Host "[Rust] Cargo found." -ForegroundColor Green
-    } else { Write-Host "[Rust] Error: Rust/Cargo not found." -ForegroundColor Red }
-
-    # Go
-    if (Get-Command go -ErrorAction SilentlyContinue) { 
-        Write-Host "[Go] Go found." -ForegroundColor Green
-        Set-Location "$PSScriptRoot/packages/go-sdk"
-        go mod tidy
-        Set-Location $PSScriptRoot
-    } else { Write-Host "[Go] Error: Go not found." -ForegroundColor Red }
+function Build-TS {
+    Write-Host "--- Building TypeScript SDK (Host) ---" -ForegroundColor Cyan
+    Set-Location "$PSScriptRoot/packages/ts-sdk"
+    pnpm run build
+    Set-Location $PSScriptRoot
     Wait-User
 }
 
 function Build-Rust {
-    Write-Host "--- Building Rust Guest (CDYLIB) ---" -ForegroundColor Magenta
+    Write-Host "--- Building Rust NAPI Module (Node & Bun Compatible) ---" -ForegroundColor Magenta
     Set-Location "$PSScriptRoot/packages/rust-sdk"
-    cargo build --release
     
-    # Orchestration: Move to TS-SDK dist for bridge consumption
-    $binDir = "$PSScriptRoot/packages/ts-sdk/dist/bin"
-    if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir -Force }
+    # Run NAPI build
+    npx napi build --release --platform
     
-    Copy-Item "target/release/*.dll", "target/release/*.so", "target/release/*.dylib" -Destination $binDir -ErrorAction SilentlyContinue
+    # Define Destinations
+    $srcNative = "$PSScriptRoot/packages/ts-sdk/src/native"
+    $distNative = "$PSScriptRoot/packages/ts-sdk/dist/native"
+
+    # Deploy to SRC (for TS development/visibility)
+    if (-not (Test-Path $srcNative)) { New-Item -ItemType Directory -Path $srcNative -Force | Out-Null }
+    Copy-Item "index.d.ts" -Destination "$srcNative/index.d.ts" -Force
+
+    # Deploy to DIST (for Production/Example Runtime execution)
+    if (-not (Test-Path $distNative)) { New-Item -ItemType Directory -Path $distNative -Force | Out-Null }
+    Copy-Item "*.node" -Destination "$distNative/index.node" -Force
     
     Set-Location $PSScriptRoot
-    Write-Host "Success: Rust artifacts moved to ts-sdk/dist/bin" -ForegroundColor Green
+    Write-Host "Success: Native artifacts deployed to src and dist." -ForegroundColor Green
     Wait-User
 }
 
 function Build-Go {
-    Write-Host "--- Building Go Guest (C-Shared) ---" -ForegroundColor Blue
-    Set-Location "$PSScriptRoot/packages/go-sdk/bridge"
+    Write-Host "--- Building Go SDK (Guest - C-Shared) ---" -ForegroundColor Cyan
+    Set-Location "$PSScriptRoot/packages/go-sdk"
+    # Placeholder for future C-shared build logic
+    go build ./...
+    Set-Location $PSScriptRoot
+    Write-Host "Success: Go packages vetted/built." -ForegroundColor Green
+    Wait-User
+}
+
+function Run-Guest-Tests {
+    Write-Host "--- Running Guest SDK Tests (Rust & Go) ---" -ForegroundColor Yellow
+    Write-Host "[Rust] Running cargo test..." -ForegroundColor Gray
+    Set-Location "$PSScriptRoot/packages/rust-sdk"
+    cargo test
     
-    $binDir = "$PSScriptRoot/packages/ts-sdk/dist/bin"
-    if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir -Force }
-
-    $outputName = if ($IsWindows) { "libisolib_go.dll" } else { "libisolib_go.so" }
-
-    # Go requires CGO_ENABLED=1 for c-shared mode
-    $env:CGO_ENABLED=1
-    go build -o "$binDir/$outputName" -buildmode=c-shared bridge.go
+    Write-Host "`n[Go] Running go test..." -ForegroundColor Gray
+    Set-Location "$PSScriptRoot/packages/go-sdk"
+    go test ./...
     
     Set-Location $PSScriptRoot
-    Write-Host "Success: Go library generated in ts-sdk/dist/bin" -ForegroundColor Green
+    Wait-User
+}
+
+function Run-TS-Tests {
+    Write-Host "--- Running TypeScript Vitest Suite ---" -ForegroundColor Yellow
+    Set-Location "$PSScriptRoot/packages/ts-sdk"
+    pnpm test
+    Set-Location $PSScriptRoot
+    Wait-User
+}
+
+function Run-Example {
+    $engine = Read-Host "Run with (N)ode or (B)un?"
+    Set-Location "$PSScriptRoot/examples/node-example"
+    
+    if ($engine.ToUpper() -eq 'B') {
+        Write-Host "Launching with Bun (Runtime Transpilation)..." -ForegroundColor Cyan
+        bun src/index.ts
+    } else {
+        Write-Host "Building and Launching with Node.js (ESM)..." -ForegroundColor Green
+        pnpm run build
+        node dist/index.js
+    }
+    
+    Set-Location $PSScriptRoot
+    Wait-User
+}
+
+function Clean-Artifacts {
+    Write-Host "--- Wiping Build Artifacts & Node Modules ---" -ForegroundColor Red
+    
+    $targets = @(
+        "$PSScriptRoot/packages/ts-sdk/dist",
+        "$PSScriptRoot/packages/ts-sdk/node_modules",
+        "$PSScriptRoot/packages/rust-sdk/target",
+        "$PSScriptRoot/packages/rust-sdk/node_modules",
+        "$PSScriptRoot/examples/node-example/dist",
+        "$PSScriptRoot/examples/node-example/node_modules",
+        "$PSScriptRoot/pnpm-lock.yaml"
+    )
+
+    foreach ($target in $targets) {
+        if (Test-Path $target) {
+            Write-Host "Removing: $target" -ForegroundColor Gray
+            Remove-Item -Recurse -Force $target -ErrorAction SilentlyContinue
+        }
+    }
+
+    Write-Host "Cleanup Complete." -ForegroundColor Green
+    Write-Host "--- Re-installing Dependencies (Fresh Slate) ---" -ForegroundColor Cyan
+    pnpm install
+    
     Wait-User
 }
 
@@ -93,13 +139,13 @@ function Run-Linter {
     
     Write-Host "[TS] Running ESLint..." -ForegroundColor Cyan
     Set-Location "$PSScriptRoot/packages/ts-sdk"
-    pnpm run lint -ErrorAction SilentlyContinue
+    try { pnpm run lint } catch { Write-Host "TS Linting failed." -ForegroundColor Red }
     
-    Write-Host "[Rust] Running Clippy..." -ForegroundColor Magenta
+    Write-Host "`n[Rust] Running Clippy..." -ForegroundColor Cyan
     Set-Location "$PSScriptRoot/packages/rust-sdk"
     cargo clippy -- -D warnings
     
-    Write-Host "[Go] Running Go Vet..." -ForegroundColor Blue
+    Write-Host "`n[Go] Running Go Vet..." -ForegroundColor Cyan
     Set-Location "$PSScriptRoot/packages/go-sdk"
     go vet ./...
     
@@ -107,56 +153,51 @@ function Run-Linter {
     Wait-User
 }
 
-function Verify-Artifacts {
-    Write-Host "--- Verifying FFI Binaries ---" -ForegroundColor Yellow
-    $binDir = "$PSScriptRoot/packages/ts-sdk/dist/bin"
-    if (Test-Path $binDir) {
-        Get-ChildItem -Path $binDir -Include *.dll, *.so, *.dylib, *.h | Select-Object Name, Length
+function Verify-Binary {
+    Write-Host "--- Verifying Native Bridge Status ---" -ForegroundColor Yellow
+    $binPath = "$PSScriptRoot/packages/ts-sdk/dist/native/index.node"
+    if (Test-Path $binPath) {
+        $size = (Get-Item $binPath).Length
+        Write-Host "[OK] Native binary found: index.node ($size bytes)" -ForegroundColor Green
     } else {
-        Write-Host "Bin directory not found. Build guests first." -ForegroundColor Red
+        Write-Host "[FAIL] Native binary missing at $binPath" -ForegroundColor Red
     }
     Wait-User
 }
 
-function Clean-Project {
-    Write-Host "--- Deep Cleaning Workspace ---" -ForegroundColor Red
-    $targets = @(
-        "packages/ts-sdk/node_modules",
-        "packages/ts-sdk/dist",
-        "packages/rust-sdk/target",
-        "examples/node-example/node_modules",
-        "examples/node-example/dist"
-    )
-    foreach ($t in $targets) {
-        $path = Join-Path $PSScriptRoot $t
-        if (Test-Path $path) { 
-            Remove-Item -Recurse -Force $path
-            Write-Host "Wiped: $t" 
-        }
-    }
-    # Remove any native artifacts in common paths
-    Get-ChildItem -Path $PSScriptRoot -Include *.so,*.dll,*.dylib,*.h -Recurse | Remove-Item -Force
-    Wait-User
-}
-
-# Main Loop
+# --- Main Menu Loop ---
 do {
-    Show-Menu
+    Clear-Host
+    Write-Host "================================================" -ForegroundColor Gray
+    Write-Host "             ISOLIB DEVELOPER COCKPIT           " -ForegroundColor White
+    Write-Host "================================================" -ForegroundColor Gray
+    Write-Host " 1. [Setup]  Check & Install Dependencies"
+    Write-Host " 2. [Build]  TypeScript SDK (Host)"
+    Write-Host " 3. [Build]  Rust SDK (Guest - Shared Lib)"
+    Write-Host " 4. [Build]  Go SDK (Guest - C-Shared)"
+    Write-Host " 5. [Test]   Run Guest SDK Tests (Rust & Go)"
+    Write-Host " 6. [Test]   Run TS Tests (Vitest)"
+    Write-Host " 7. [Run]    Launch Node Example App"
+    Write-Host " 8. [Clean]  Wipe Build Artifacts & Re-install"
+    Write-Host " 9. [Lint]   Run Polyglot Linter (TS, Rust, Go)"
+    Write-Host " V. [Verify] Check FFI Binary Status"
+    Write-Host "------------------------------------------------"
+    Write-Host " Q. Quit"
+    Write-Host "================================================"
+    
     $choice = (Read-Host "Select Option").ToUpper()
+
     switch ($choice) {
         '1' { Check-Dependencies }
-        '2' { Set-Location "$PSScriptRoot/packages/ts-sdk"; pnpm build; Set-Location $PSScriptRoot; Wait-User }
+        '2' { Build-TS }
         '3' { Build-Rust }
         '4' { Build-Go }
-        '5' { 
-            Write-Host "[Rust Tests]" -ForegroundColor Magenta; Set-Location "$PSScriptRoot/packages/rust-sdk"; cargo test
-            Write-Host "[Go Tests]" -ForegroundColor Blue; Set-Location "$PSScriptRoot/packages/go-sdk"; go test ./...
-            Set-Location $PSScriptRoot; Wait-User 
-        }
-        '6' { Set-Location "$PSScriptRoot/packages/ts-sdk"; pnpm test; Set-Location $PSScriptRoot; Wait-User }
-        '7' { Set-Location "$PSScriptRoot/examples/node-example"; pnpm start; Set-Location $PSScriptRoot; Wait-User }
-        '8' { Clean-Project }
+        '5' { Run-Guest-Tests }
+        '6' { Run-TS-Tests }
+        '7' { Run-Example }
+        '8' { Clean-Artifacts }
         '9' { Run-Linter }
-        'V' { Verify-Artifacts }
+        'V' { Verify-Binary }
+        'Q' { exit }
     }
-} while ($choice -ne 'Q')
+} while ($true)

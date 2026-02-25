@@ -1,27 +1,58 @@
-// bridge-worker.ts
-import { registerCallback } from "./connections/bridge-connector";
-import { normalizeLevel } from "./util/levels";
+/**
+ * ISOLIB Bridge Worker
+ * Responsible for receiving raw log lines from the FFI bridge, 
+ * validating their schema, and routing them to the standard output.
+ */
 
-function isValidEvent(obj: any) {
-  return obj && typeof obj.timestamp === "number" && typeof obj.level === "string" && typeof obj.app === "string" && typeof obj.message === "string";
+// Added explicit .js extensions to satisfy NodeNext ESM resolution [cite: 318]
+import { registerCallback } from "./connections/bridge-connector.js";
+import { normalizeLevel } from "./util/levels.js";
+
+/**
+ * Validates that an object matches the mandatory ISOLIB schema.
+ * @param obj - The object to validate
+ */
+function isValidEvent(obj: any): boolean {
+  return (
+    obj &&
+    typeof obj.timestamp === "number" &&
+    typeof obj.level === "string" &&
+    typeof obj.app === "string" &&
+    typeof obj.message === "string"
+  );
 }
 
-function handleLine(line: string) {
+/**
+ * Parses a JSON string, performs normalization, and outputs the result.
+ * @param line - The raw string received from the guest SDK
+ */
+function handleLine(line: string): void {
   try {
     const obj = JSON.parse(line);
+
     if (!isValidEvent(obj)) {
       console.warn("Invalid event shape:", line);
       return;
     }
+
+    // Normalize pino-style log levels [cite: 321]
     obj.level = normalizeLevel(obj.level);
+    
+    // Default metadata injection
     obj.env = obj.env || process.env.NODE_ENV || "development";
     obj.version = obj.version || process.env.ISOLIB_VERSION || null;
+
+    // Route the finalized event to stdout
     console.log(JSON.stringify(obj));
   } catch (err) {
     console.warn("Failed to parse line:", err);
   }
 }
 
-registerCallback((line) => {
+/**
+ * Subscribes to the bridge connector's global callback.
+ * Explicitly typed 'line' as string to resolve TS7006.
+ */
+registerCallback((line: string) => {
   handleLine(line);
 });

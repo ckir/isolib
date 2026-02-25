@@ -1,16 +1,12 @@
-// src/lib.rs
-use std::ffi::CStr;
-use std::os::raw::c_char;
+use napi_derive::napi;
 
-#[no_mangle]
-pub extern "C" fn isolib_guest_send_line(line: *const c_char) {
-    if line.is_null() {
-        return;
-    }
-    unsafe {
-        let cstr = CStr::from_ptr(line);
-        if let Ok(s) = cstr.to_str() {
-            println!("{}", s);
-        }
-    }
+#[napi]
+pub fn log_event(level: String, message: String, app: String) -> String {
+    // This is where your core Rust logging logic lives
+    format!("[Rust Guest] {}: {} (App: {})", level.to_uppercase(), message, app)
+}
+
+#[napi]
+pub fn get_status() -> bool {
+    true
 }
