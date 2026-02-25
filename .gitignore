@@ -1,0 +1,39 @@
+# --- Node / pnpm / TypeScript ---
+node_modules/
+dist/
+lib/
+*.tsbuildinfo
+.eslintcache
+coverage/
+# DO NOT ignore pnpm-lock.yaml if publishing. 
+# It ensures your GitHub Action builds with exact dependency versions.
+
+# --- Rust (Guest) ---
+/packages/rust-sdk/target/
+**/*.rs.bk
+
+# --- Go (Guest) ---
+/packages/go-sdk/bin/
+/packages/go-sdk/vendor/
+
+# --- FFI Shared Libraries (The "Glue") ---
+# We ignore these in the repo because they are platform-specific (win/linux/mac)
+# and should be generated during CI/CD or dev-time.
+*.dll
+*.so
+*.dylib
+*.h
+*.a
+*.lib
+
+# --- Cockpit / Local Tools ---
+.env
+.python-version
+__pycache__/
+*.log
+
+# --- IDEs ---
+.vscode/
+.idea/
+
+isolib.txt

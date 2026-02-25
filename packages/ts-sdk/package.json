@@ -1,0 +1,23 @@
+{
+  "name": "@isolib/ts-sdk",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p .",
+    "test:unit": "vitest run --dir test/unit",
+    "test:integration": "vitest run --dir test/integration",
+    "test": "pnpm -w --filter @isolib/ts-sdk test:unit && pnpm -w --filter @isolib/ts-sdk test:integration",
+    "start": "node ./dist/index.js",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.9",
+    "@types/node": "^25.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "eslint": "^10.0.2",
+    "typescript-eslint": "^8.0.0"
+  }
+}

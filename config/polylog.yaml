@@ -1,0 +1,32 @@
+default:
+  app: "isolib-app"
+  env: "development"
+  transports:
+    console:
+      enabled: true
+      level: "debug"   # pino level
+      pretty: true
+      timezone: "UTC"
+    file:
+      enabled: false
+      level: "debug"
+    http:
+      enabled: false
+      level: "info"
+      endpoint: "http://localhost:9200/logs"
+environments:
+  development:
+    transports:
+      console:
+        enabled: true
+        level: "debug"
+  production:
+    transports:
+      console:
+        enabled: true
+        level: "info"
+        pretty: false
+      http:
+        enabled: true
+        level: "info"
+        endpoint: "https://logs.example.com/ingest"
