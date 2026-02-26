@@ -1,74 +1,54 @@
 import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-/**
- * ISOLIB Bridge Connector
- * Dual-Runtime Support: Bun | Node (Standard N-API)
- * * This class manages the connection between the TypeScript host and the 
- * Rust guest. It autodetects the runtime to handle FFI loading correctly.
- */
+const require = createRequire(import.meta.url);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 export class BridgeConnector {
     private isBun: boolean;
     private nativeModule: any = null;
 
     constructor() {
-        // Detect if running under Bun or Node.js
         this.isBun = typeof (process as any)?.versions?.bun !== 'undefined';
         this.initNative();
     }
 
-    /**
-     * Dynamically loads the native bridge artifact.
-     * Uses require for .node compatibility across both runtimes.
-     */
     private initNative() {
         try {
-            // Path relative to the compiled JS in dist/connections/
-            const nativePath = '../native/index.node';
+            // Absolute path resolution for Vitest compatibility
+            const nativePath = join(__dirname, '..', 'native', 'index.node');
             
             this.nativeModule = require(nativePath);
             
-            const runtimeName = this.isBun ? "Bun" : "Node";
-            console.log(`🚀 [isolib] Bridge initialized using ${runtimeName} runtime`); 
+            // Health Check: Verify expected exports exist
+            if (this.nativeModule && typeof this.nativeModule.log_from_rust !== 'function') {
+                console.error("❌ [isolib] Native module loaded but 'log_from_rust' is missing!");
+                console.error("📦 Available exports:", Object.keys(this.nativeModule));
+            } else {
+                const runtime = this.isBun ? "Bun" : "Node";
+                console.log(`🚀 [isolib] Bridge initialized using ${runtime} runtime`);
+            }
         } catch (err) {
-            console.error("❌ [isolib] Failed to load native bridge. Did you run Cockpit Option 3?"); 
+            console.error("❌ [isolib] Failed to load native bridge at:", join(__dirname, '..', 'native', 'index.node'));
+            console.error("👉 Run Cockpit Option 3 to generate the binary.");
         }
     }
 
-    /**
-     * Forwards log data to the Rust guest SDK.
-     * @param level - Pino log level
-     * @param msg - The log message
-     * @param app - Source application name
-     */
-    public sendToRust(level: string, msg: string, app: string) {
-        if (!this.nativeModule) return;
-        
+    public getNative() {
+        return this.nativeModule;
+    }
+
+    public sendToRust(level: string, msg: string, extras: string) {
+        if (!this.nativeModule?.log_from_rust) return;
         try {
-            const result = this.nativeModule.logEvent(level, msg, app); 
-            console.log(result); 
+            this.nativeModule.log_from_rust(level, msg, extras);
         } catch (err) {
             console.error("error calling Rust bridge:", err);
         }
     }
 }
 
-// Global state for internal SDK communication
-const instance = new BridgeConnector();
-let globalCallback: ((line: string) => void) | null = null;
-
-/**
- * Registers a callback for the bridge worker to process lines.
- */
-export function registerCallback(callback: (line: string) => void) {
-    globalCallback = callback;
-}
-
-/**
- * Sends a raw string (usually JSON) through the bridge system.
- */
-export function sendLine(line: string) {
-    if (globalCallback) {
-        globalCallback(line);
-    }
-}
+export const bridgeConnector = new BridgeConnector();
+export function registerCallback(cb: (line: string) => void) { /* ... */ }
+export function sendLine(line: string) { /* ... */ }

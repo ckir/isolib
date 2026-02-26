@@ -37,6 +37,5 @@ __pycache__/
 .idea/
 
 isolib.txt
-*.lock
-pnpm-lock.yaml
+
 

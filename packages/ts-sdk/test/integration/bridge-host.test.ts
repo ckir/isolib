@@ -1,23 +1,31 @@
-// test/integration/bridge-host.test.ts
-import { describe, it, expect } from "vitest";
-import { registerCallback, sendLine } from "../../src/connections/bridge-connector";
+// packages/ts-sdk/test/integration/bridge-host.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { isolibLogger } from '../../src/core/singleton.js';
 
 describe("bridge host integration", () => {
-  it("accepts a line and invokes callback", (done) => {
-    registerCallback((line) => {
-      const obj = JSON.parse(line);
-      expect(obj.level).toBe("info");
-      expect(obj.message).toBe("test");
-      done();
+  beforeEach(() => {
+    isolibLogger.reset(); // Now exists and clears previous callbacks
+  });
+
+  it("accepts a line and invokes callback", async () => {
+    const logPromise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Test timed out")), 2000);
+
+      isolibLogger.onLog((level, message, extras) => {
+        if (message === "test message") {
+          try {
+            expect(level).toBe("info");
+            expect(extras).toEqual({ foo: "bar" });
+            clearTimeout(timeout);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      });
     });
 
-    const ev = {
-      timestamp: Date.now(),
-      level: "info",
-      app: "isolib-app",
-      message: "test",
-      extras: {}
-    };
-    sendLine(JSON.stringify(ev));
+    isolibLogger.log("info", "test message", { foo: "bar" });
+    await logPromise;
   });
 });

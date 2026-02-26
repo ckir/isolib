@@ -1,14 +1,21 @@
-/**
- * ISOLIB Node.js Example
- */
+import "../../../packages/ts-sdk/src/core/singleton.js";
+import { LoggerBuilder } from "../../../packages/ts-sdk/src/loggers/builder.js";
+import { createRequire } from 'module';
 
-// Import from the compiled 'dist' directory with .js extensions
-import { coreLogger } from "../../../packages/ts-sdk/dist/core/coreLogger.js";
-import { logger } from "../../../packages/ts-sdk/dist/loggers/logger.js"; 
+const require = createRequire(import.meta.url);
+const native = require("../../../packages/ts-sdk/dist/native/index.node");
 
-console.log("Starting isolib integration example...");
+// 1. Bootstrap
+globalThis.isolibLogger.log("info", "TS Host Booting...");
 
-coreLogger.info("Booting (core logger)");
-logger.info("Hello from configured logger", { 
-    extras: { userId: "u123" } 
-});
+// 2. Log from Rust before upgrade (will use coreLogger + buffer)
+native.log_from_rust("debug", "Rust initializing...", JSON.stringify({ guest: "rust" }));
+
+// 3. Upgrade TS Logger
+const mainLogger = new LoggerBuilder()
+    .with_rotating_files({ path: "./logs/polyglot.log" })
+    .build();
+globalThis.isolibLogger.upgrade(mainLogger);
+
+// 4. Log from Rust after upgrade (will go straight to pino-roll)
+native.log_from_rust("info", "Rust now logging to rotating files!", JSON.stringify({ status: "active" }));

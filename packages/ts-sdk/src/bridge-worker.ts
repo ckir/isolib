@@ -4,7 +4,7 @@
  * validating their schema, and routing them to the standard output.
  */
 
-// Added explicit .js extensions to satisfy NodeNext ESM resolution [cite: 318]
+// Added explicit .js extensions to satisfy NodeNext ESM resolution 
 import { registerCallback } from "./connections/bridge-connector.js";
 import { normalizeLevel } from "./util/levels.js";
 
@@ -35,7 +35,7 @@ function handleLine(line: string): void {
       return;
     }
 
-    // Normalize pino-style log levels [cite: 321]
+    // Normalize pino-style log levels 
     obj.level = normalizeLevel(obj.level);
     
     // Default metadata injection
